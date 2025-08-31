@@ -1,28 +1,49 @@
-Set sh = CreateObject("WScript.Shell")
-Set fso = CreateObject("Scripting.FileSystemObject")
+' === auto-python.vbs ===
+Option Explicit
+Dim objShell, objFSO, exitCode, installer, downloadURL, tempPath, savePath
 
-'Download python installer
-sh.Run "powershell -Command ""Invoke-WebRequest -Uri https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe -OutFile python-installer.exe""", 0, true
+Set objShell = CreateObject("WScript.Shell")
+Set objFSO = CreateObject("Scripting.FileSystemObject")
 
-'Install silent
-sh.Run "python-installer.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0", 0, true
+' Lokasi installer
+downloadURL = "https://www.python.org/ftp/python/3.12.5/python-3.12.5-amd64.exe"
+tempPath = objShell.ExpandEnvironmentStrings("%TEMP%")
+savePath = tempPath & "\python-installer.exe"
 
-'Delete installer
-If fso.FileExists("python-installer.exe") Then fso.DeleteFile("python-installer.exe")
+' Cek Python
+exitCode = objShell.Run("cmd /c python --version", 0, True)
 
-'Test python
-On Error Resume Next
-Set exec = sh.Exec("cmd /c python --version")
-WScript.Sleep 2000
-
-If exec.Status <> 0 Then
-    'notif gagal
-    sh.Run "powershell -Command ""[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms');[System.Windows.Forms.MessageBox]::Show('Install Python gagal. Silakan install manual.','Gagal')""", 0, false
-    WScript.Quit
+If exitCode = 0 Then
+    objShell.Run "cmd /k python script.py", 1, True
+Else
+    ' Download Python installer
+    If Not objFSO.FileExists(savePath) Then
+        DownloadFile downloadURL, savePath
+    End If
+    
+    ' Install Python silent (Add to PATH, no GUI)
+    exitCode = objShell.Run("""" & savePath & """ /quiet InstallAllUsers=1 PrependPath=1 Include_test=0", 1, True)
+    
+    If exitCode = 0 Then
+        objShell.Popup "✅ Python berhasil diinstall bro!", 5, "Installer", 64
+        objShell.Run "cmd /k python script.py", 1, True
+    Else
+        objShell.Popup "❌ Gagal install Python, coba install manual ya.", 5, "Installer Error", 16
+    End If
 End If
 
-'notif sukses
-sh.Run "powershell -Command ""[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms');[System.Windows.Forms.MessageBox]::Show('Python berhasil diinstall!','Sukses')""", 0, false
-
-'jalankan script lo di CMD normal
-sh.Run "cmd /c python main.py", 1, false
+' === Function download file via MSXML2.XMLHTTP ===
+Sub DownloadFile(URL, SaveTo)
+    Dim objHTTP, objStream
+    Set objHTTP = CreateObject("MSXML2.XMLHTTP")
+    objHTTP.Open "GET", URL, False
+    objHTTP.Send
+    If objHTTP.Status = 200 Then
+        Set objStream = CreateObject("ADODB.Stream")
+        objStream.Open
+        objStream.Type = 1
+        objStream.Write objHTTP.ResponseBody
+        objStream.SaveToFile SaveTo, 2
+        objStream.Close
+    End If
+End Sub
